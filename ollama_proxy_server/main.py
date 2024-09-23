@@ -45,7 +45,8 @@ async def auth_middleware(request, handler):
 async def process_request(server_url, request_data, endpoint):
     async with aiohttp.ClientSession() as session:
         try:
-            async with session.post(f"{server_url}/api/{endpoint}", json=request_data) as resp:
+            url = f"{server_url}{endpoint}"
+            async with session.post(url, json=request_data) as resp:
                 response_data = await resp.json()
                 return response_data
         except aiohttp.ClientError as e:
@@ -84,17 +85,16 @@ async def handle_request(request, shared_queue, context):
 
     # Check the path before "/api" and log or process accordingly
     full_path = request.path
-    path_before_api = full_path.split('/api')[0]
+    if '/chat' in full_path:
+        path_before_api = full_path.split('/chat')[0]
+    elif '/api' in full_path:
+        path_before_api = full_path.split('/api')[0]
 
     # Log the request
     add_access_log_entry(context['log_path'], f"request_before_api", user, client_ip, "Authorized", path_before_api, shared_queue.qsize())
 
-    if '/api/generate' in request.path:
-        endpoint = 'generate'
-    elif '/api/chat' in request.path:
-        endpoint = 'chat'
-    else:
-        return
+    
+    endpoint = request.path
 
     future_response = asyncio.Future()
     await shared_queue.put((data, request, user, client_ip, future_response))
@@ -104,10 +104,10 @@ async def handle_request(request, shared_queue, context):
 # Process each shared queue asynchronously
 async def process_shared_queue(server_name, server_info, shared_queue, context):
     while True:
-        data, original_request, user, client_ip, future_response = await shared_queue.get()
+        data, request, user, client_ip, future_response = await shared_queue.get()
         
         # Determine the endpoint type based on the request path
-        endpoint = 'generate' if '/api/generate' in original_request.path else 'chat'
+        endpoint = request.path
         
         response_data = await process_request(server_info['url'], data, endpoint)
         add_access_log_entry(context['log_path'], f"{endpoint}_done", user, client_ip, "Authorized", server_name, shared_queue.qsize())
