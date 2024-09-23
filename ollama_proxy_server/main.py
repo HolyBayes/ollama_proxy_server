@@ -83,28 +83,25 @@ async def handle_request(request, shared_queue, context):
     user = request.get('user', 'unknown')
     client_ip = request.remote
 
-    # Check the path before "/api" and log or process accordingly
-    full_path = request.path
-    if '/chat' in full_path:
-        path_before_api = full_path.split('/chat')[0]
-    elif '/api' in full_path:
-        path_before_api = full_path.split('/api')[0]
 
-    # Log the request
-    add_access_log_entry(context['log_path'], f"request_before_api", user, client_ip, "Authorized", path_before_api, shared_queue.qsize())
-
-    
     endpoint = request.path
 
+    # Log the request
+    add_access_log_entry(context['log_path'], f"request_before_api", user, client_ip, "Authorized", endpoint, shared_queue.qsize())
+
+
     future_response = asyncio.Future()
-    await shared_queue.put((data, request, user, client_ip, future_response))
+    await shared_queue.put((data, request, future_response))
     response_data = await future_response
     return web.json_response(response_data)
 
 # Process each shared queue asynchronously
 async def process_shared_queue(server_name, server_info, shared_queue, context):
     while True:
-        data, request, user, client_ip, future_response = await shared_queue.get()
+        data, request, future_response = await shared_queue.get()
+        user = request.get('user', 'unknown')
+        client_ip = request.remote
+
         
         # Determine the endpoint type based on the request path
         endpoint = request.path
